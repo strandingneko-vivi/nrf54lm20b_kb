@@ -1,0 +1,43 @@
+board:
+  name: nrf54lm20b_kb
+  full_name: nRF54LM20B KB
+  vendor: nordic
+  socs:
+  - name: nrf54lm20b
+    variants:
+    - name: ns
+      cpucluster: cpuapp
+runners:
+  run_once:
+    '--recover':
+    - runners:
+      - nrfjprog
+      - nrfutil
+      run: first
+      groups:
+      - boards:
+        - nrf54lm20b_kb/nrf54lm20b/cpuapp
+        - nrf54lm20b_kb/nrf54lm20b/cpuapp/ns
+        - nrf54lm20b_kb/nrf54lm20b/cpuflpr
+    '--erase':
+    - runners:
+      - nrfjprog
+      - jlink
+      - nrfutil
+      run: first
+      groups:
+      - boards:
+        - nrf54lm20b_kb/nrf54lm20b/cpuapp
+        - nrf54lm20b_kb/nrf54lm20b/cpuapp/ns
+        - nrf54lm20b_kb/nrf54lm20b/cpuflpr
+    '--reset':
+    - runners:
+      - nrfjprog
+      - jlink
+      - nrfutil
+      run: last
+      groups:
+      - boards:
+        - nrf54lm20b_kb/nrf54lm20b/cpuapp
+        - nrf54lm20b_kb/nrf54lm20b/cpuapp/ns
+        - nrf54lm20b_kb/nrf54lm20b/cpuflpr
