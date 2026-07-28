@@ -27,32 +27,20 @@ static struct hids_report input = {
 static uint8_t simulate_input;
 static uint8_t ctrl_point;
 static uint8_t report_map[] = {
-	0x05, 0x01, /* Usage Page (Generic Desktop Ctrls) */
-	0x09, 0x02, /* Usage (Mouse) */
+	0x05, 0x0C, /* Usage Page (Consumer Devices) */
+	0x09, 0x01, /* Usage (Consumer Control) */
 	0xA1, 0x01, /* Collection (Application) */
-	0x85, 0x01, /*	 Report Id (1) */
-	0x09, 0x01, /*   Usage (Pointer) */
-	0xA1, 0x00, /*   Collection (Physical) */
-	0x05, 0x09, /*     Usage Page (Button) */
-	0x19, 0x01, /*     Usage Minimum (0x01) */
-	0x29, 0x03, /*     Usage Maximum (0x03) */
-	0x15, 0x00, /*     Logical Minimum (0) */
-	0x25, 0x01, /*     Logical Maximum (1) */
-	0x95, 0x03, /*     Report Count (3) */
-	0x75, 0x01, /*     Report Size (1) */
-	0x81, 0x02, /*     Input (Data,Var,Abs,No Wrap,Linear,...) */
-	0x95, 0x01, /*     Report Count (1) */
-	0x75, 0x05, /*     Report Size (5) */
-	0x81, 0x03, /*     Input (Const,Var,Abs,No Wrap,Linear,...) */
-	0x05, 0x01, /*     Usage Page (Generic Desktop Ctrls) */
-	0x09, 0x30, /*     Usage (X) */
-	0x09, 0x31, /*     Usage (Y) */
-	0x15, 0x81, /*     Logical Minimum (129) */
-	0x25, 0x7F, /*     Logical Maximum (127) */
-	0x75, 0x08, /*     Report Size (8) */
-	0x95, 0x02, /*     Report Count (2) */
-	0x81, 0x06, /*     Input (Data,Var,Rel,No Wrap,Linear,...) */
-	0xC0,       /*   End Collection */
+	0x85, 0x01, /*   Report Id (1) */
+	0x15, 0x00, /*   Logical Minimum (0) */
+	0x25, 0x01, /*   Logical Maximum (1) */
+	0x75, 0x01, /*   Report Size (1) */
+	0x95, 0x02, /*   Report Count (2) */
+	0x09, 0xE9, /*   Usage (Volume Increment) */
+	0x09, 0xEA, /*   Usage (Volume Decrement) */
+	0x81, 0x02, /*   Input (Data,Var,Abs,No Wrap,Linear,...) */
+	0x75, 0x06, /*   Report Size (6) */
+	0x95, 0x01, /*   Report Count (1) */
+	0x81, 0x03, /*   Input (Const,Var,Abs,No Wrap,Linear,...) */
 	0xC0,       /* End Collection */
 };
 
@@ -120,7 +108,7 @@ BT_GATT_SERVICE_DEFINE(
 
 static const struct led_dt_spec led0 = LED_DT_SPEC_GET(LED0_NODE);
 
-/* Current pressed-button bitmask (bits 0..2 correspond to Report Map buttons 1..3) */
+/* Current pressed-button bitmask (bit 0 = Volume+, bit 1 = Volume-) */
 static uint8_t buttons_state;
 
 static void button_input_cb(struct input_event *evt, void *user_data)
@@ -138,16 +126,13 @@ static void button_input_cb(struct input_event *evt, void *user_data)
 		led_set_brightness_dt(&led0, evt->value ? 100 : 0);
 	}
 
-	/* Map input key code to HID mouse button bit (Report Map supports 3 buttons) */
+	/* Map input key code to HID consumer control bit (Volume+/Volume-) */
 	switch (evt->code) {
 	case INPUT_KEY_0:
-		btn_bit = BIT(0);
+		btn_bit = BIT(0); /* Volume Increment */
 		break;
 	case INPUT_KEY_1:
-		btn_bit = BIT(1);
-		break;
-	case INPUT_KEY_2:
-		btn_bit = BIT(2);
+		btn_bit = BIT(1); /* Volume Decrement */
 		break;
 	default:
 		/* Key not mapped to a HID button */
@@ -166,12 +151,12 @@ static void button_input_cb(struct input_event *evt, void *user_data)
 		return;
 	}
 
-	/* HID Report (Report ID 1, mouse):
-	 * Byte 0: buttons (lower 3 bits)
-	 * Byte 1: X axis (int8, relative)
-	 * Byte 2: Y axis (int8, relative)
+	/* HID Report (Report ID 1, Consumer Control):
+	 * Byte 0: bit 0 = Volume+, bit 1 = Volume-, bits 2..7 = padding
+	 * Note: Report ID is not included in BLE HOGP notifications, it is
+	 *       bound via the Report Reference Descriptor (0x2908).
 	 */
-	int8_t report[3] = {(int8_t)buttons_state, 0, 0};
+	uint8_t report[1] = {buttons_state};
 
 	bt_gatt_notify_uuid(NULL, BT_UUID_HIDS_REPORT, le_hids_svc.attrs, report, sizeof(report));
 }
