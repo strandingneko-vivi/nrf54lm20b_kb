@@ -20,6 +20,8 @@ static const struct bt_data sd[] = {
 	BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
 };
 
+static struct bt_conn *pending_unpaired_conn = NULL;
+
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
@@ -36,6 +38,19 @@ static void connected(struct bt_conn *conn, uint8_t err)
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	LOG_INF("Disconnected, reason 0x%02x %s", reason, bt_hci_err_to_str(reason));
+
+	if (pending_unpaired_conn == conn) {
+		int err = bt_unpair(BT_ID_DEFAULT, bt_conn_get_dst(conn));
+		if (err) {
+			LOG_ERR("Failed to unpair, err %d", err);
+		} else {
+			LOG_INF("Bond removed");
+		}
+
+		bt_conn_unref(pending_unpaired_conn);
+
+		pending_unpaired_conn = NULL;
+	}
 }
 
 static void recycled(void)
@@ -89,10 +104,19 @@ static void le_param_updated(struct bt_conn *conn, uint16_t interval, uint16_t l
 
 static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_security_err err)
 {
+	const bt_addr_le_t *peer = bt_conn_get_dst(conn);
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(peer, addr, sizeof(addr));
+
 	if (err) {
-		LOG_ERR("Security change failed, err 0x%02x %s", err, bt_security_err_to_str(err));
+		LOG_ERR("Security change failed, err 0x%02x %s, peer: %s", err,
+			bt_security_err_to_str(err), addr);
+
+		pending_unpaired_conn = bt_conn_ref(conn);
+		bt_conn_disconnect(conn, BT_HCI_ERR_AUTH_FAIL);
 	} else {
-		LOG_INF("Security level %d", level);
+		LOG_INF("Security level %d, peer: %s", level, addr);
 	}
 }
 
@@ -137,6 +161,33 @@ static struct bt_conn_auth_cb auth_cb_display = {
 	.cancel = auth_cancel,
 };
 
+static void pairing_complete(struct bt_conn *conn, bool bonded)
+{
+	const bt_addr_le_t *peer = bt_conn_get_dst(conn);
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(peer, addr, sizeof(addr));
+	LOG_INF("Pairing complete, bonded: %d, peer: %s", bonded, addr);
+}
+
+static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
+{
+	const bt_addr_le_t *peer = bt_conn_get_dst(conn);
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(peer, addr, sizeof(addr));
+	LOG_WRN("Pairing failed with %s, reason 0x%02x %s", addr, reason,
+		bt_security_err_to_str(reason));
+
+	bt_conn_disconnect(conn, BT_HCI_ERR_AUTH_FAIL);
+}
+
+static struct bt_conn_auth_info_cb auth_info_cb = {
+	.pairing_complete = pairing_complete,
+	.pairing_failed = pairing_failed,
+	.bond_deleted = NULL,
+};
+
 static void bt_ready(int err)
 {
 	if (err) {
@@ -173,6 +224,7 @@ static int le_task_init(void)
 	}
 
 	bt_conn_auth_cb_register(&auth_cb_display);
+	bt_conn_auth_info_cb_register(&auth_info_cb);
 
 	return 0;
 }
