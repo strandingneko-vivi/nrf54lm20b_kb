@@ -13,7 +13,8 @@ LOG_MODULE_REGISTER(ble_task, LOG_LEVEL_DBG);
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
 	BT_DATA_BYTES(BT_DATA_UUID16_ALL, BT_UUID_16_ENCODE(BT_UUID_HIDS_VAL),
-		      BT_UUID_16_ENCODE(BT_UUID_DIS_VAL), BT_UUID_16_ENCODE(BT_UUID_BAS_VAL)),
+		      BT_UUID_16_ENCODE(BT_UUID_DIS_VAL), BT_UUID_16_ENCODE(BT_UUID_BAS_VAL),
+		      BT_UUID_16_ENCODE(BT_UUID_HTS_VAL)),
 };
 
 static const struct bt_data sd[] = {
@@ -26,12 +27,21 @@ static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
 		LOG_ERR("Connection failed, err 0x%02x %s", err, bt_hci_err_to_str(err));
+		return;
 	} else {
 		LOG_INF("Connected");
 	}
 
 	if (bt_conn_set_security(conn, BT_SECURITY_L2)) {
 		LOG_ERR("Failed to set security");
+		return;
+	}
+
+	int ret = bt_conn_le_param_update(
+		conn, BT_LE_CONN_PARAM(BT_GAP_MS_TO_CONN_INTERVAL(20), BT_GAP_MS_TO_CONN_INTERVAL(20),
+				       49, BT_GAP_MS_TO_CONN_TIMEOUT(4000)));
+	if (ret) {
+		LOG_WRN("Failed to update connection parameters (err %d)", ret);
 	}
 }
 
